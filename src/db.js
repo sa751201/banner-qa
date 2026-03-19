@@ -1,5 +1,8 @@
 // db.js — NeDB flat-file 資料庫
-// Railway 上 Volume 掛載到 /app/data，本地用 ./data/
+// Guideline 文件結構新增 psdTemplates 欄位：
+// psdTemplates: [
+//   { id, name, psdPath, psdFilename, layers, createdAt }
+// ]
 
 const Datastore = require('nedb-promises');
 const path = require('path');
@@ -19,7 +22,7 @@ guidelines.ensureIndex({ fieldName: 'typeKey', unique: true });
 guidelines.ensureIndex({ fieldName: 'label' });
 
 async function create(data) {
-  return guidelines.insert({ ...data, createdAt: new Date(), updatedAt: new Date() });
+  return guidelines.insert({ ...data, psdTemplates: [], createdAt: new Date(), updatedAt: new Date() });
 }
 
 async function upsert(typeKey, data) {
@@ -52,8 +55,32 @@ async function remove(typeKey) {
   return guidelines.remove({ typeKey }, {});
 }
 
-async function count() {
-  return guidelines.count({});
+// ── PSD Template 操作 ─────────────────────────────────
+
+async function addPsdTemplate(typeKey, template) {
+  const g = await findByKey(typeKey);
+  if (!g) throw new Error('找不到此 Guideline');
+  const templates = g.psdTemplates || [];
+  templates.push({ ...template, createdAt: new Date() });
+  await guidelines.update({ typeKey }, { $set: { psdTemplates: templates, updatedAt: new Date() } });
+  return templates;
 }
 
-module.exports = { create, upsert, findByKey, search, all, remove, count };
+async function removePsdTemplate(typeKey, templateId) {
+  const g = await findByKey(typeKey);
+  if (!g) throw new Error('找不到此 Guideline');
+  const templates = (g.psdTemplates || []).filter(t => t.id !== templateId);
+  await guidelines.update({ typeKey }, { $set: { psdTemplates: templates, updatedAt: new Date() } });
+  return templates;
+}
+
+async function getPsdTemplate(typeKey, templateId) {
+  const g = await findByKey(typeKey);
+  if (!g) return null;
+  return (g.psdTemplates || []).find(t => t.id === templateId) || null;
+}
+
+module.exports = {
+  create, upsert, findByKey, search, all, remove,
+  addPsdTemplate, removePsdTemplate, getPsdTemplate,
+};
