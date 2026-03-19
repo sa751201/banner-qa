@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Banner QA 後台</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+header{background:#1e293b;padding:18px 32px;display:flex;align-items:center;gap:16px;border-bottom:1px solid #334155}
+header h1{font-size:17px;font-weight:600}
+.key-wrap{margin-left:auto;display:flex;align-items:center;gap:8px}
+.key-wrap input{padding:7px 12px;border-radius:7px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:13px;width:220px}
+.layout{display:grid;grid-template-columns:360px 1fr;height:calc(100vh - 57px)}
+.left{background:#1e293b;border-right:1px solid #334155;padding:22px;overflow-y:auto;display:flex;flex-direction:column;gap:16px}
+.panel-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#64748b}
+.drop{border:2px dashed #334155;border-radius:10px;padding:28px 16px;text-align:center;cursor:pointer;transition:all .2s}
+.drop:hover,.drop.over{border-color:#3b82f6;background:rgba(59,130,246,.05)}
+.drop p{font-size:13px;color:#64748b;margin-top:6px}
+.drop strong{color:#3b82f6}
+input[type=file]{display:none}
+.log{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto}
+.log-item{background:#0f172a;border-radius:7px;padding:10px 12px;font-size:12px}
+.log-name{font-weight:600;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar-wrap{height:3px;background:#1e293b;border-radius:2px;margin-top:6px;overflow:hidden}
+.bar{height:100%;border-radius:2px;transition:width .3s}
+.bar-spin{background:#facc15;width:55%;animation:spin 1.2s ease-in-out infinite alternate}
+.bar-ok{background:#22c55e;width:100%}
+.bar-err{background:#ef4444;width:100%}
+.log-status{margin-top:4px;font-size:11px;color:#64748b}
+.ok{color:#22c55e}.err{color:#ef4444}
+@keyframes spin{to{opacity:.4}}
+.right{padding:24px;overflow-y:auto}
+.toolbar{display:flex;gap:10px;margin-bottom:18px}
+.toolbar input{flex:1;padding:8px 13px;border-radius:7px;border:1px solid #334155;background:#1e293b;color:#e2e8f0;font-size:13px}
+.toolbar input::placeholder{color:#475569}
+.count{font-size:12px;color:#64748b;margin-bottom:14px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:9px 11px;color:#64748b;font-weight:500;border-bottom:1px solid #334155}
+td{padding:10px 11px;border-bottom:1px solid #1e293b;vertical-align:middle}
+tr:hover td{background:rgba(255,255,255,.02)}
+.label-cell{font-weight:500;color:#e2e8f0}
+.sub{font-size:11px;color:#475569;margin-top:2px}
+.badge{display:inline-block;padding:2px 7px;border-radius:9px;background:#1e293b;font-size:11px;color:#94a3b8}
+.dim{color:#64748b;font-size:12px}
+.rc{color:#38bdf8;font-size:12px}
+.act button{padding:4px 9px;border-radius:5px;border:none;cursor:pointer;font-size:11px;font-weight:600;margin-right:4px}
+.btn-dl{background:#1e40af;color:#fff}.btn-dl:hover{background:#1d4ed8}
+.btn-del{background:#7f1d1d;color:#fff}.btn-del:hover{background:#991b1b}
+.empty{text-align:center;padding:60px;color:#475569}
+</style>
+</head>
+<body>
+<header>
+  <div>📐</div>
+  <h1>Banner QA 後台管理</h1>
+  <div class="key-wrap">
+    <span style="font-size:12px;color:#64748b">Admin Key</span>
+    <input type="password" id="adminKey" placeholder="輸入管理金鑰">
+  </div>
+</header>
+<div class="layout">
+  <div class="left">
+    <div class="panel-label">上傳規格 PDF</div>
+    <div class="drop" id="drop" onclick="document.getElementById('fileIn').click()"
+         ondragover="event.preventDefault();this.classList.add('over')"
+         ondragleave="this.classList.remove('over')"
+         ondrop="onDrop(event)">
+      <div style="font-size:32px">📄</div>
+      <p><strong>點擊或拖曳 PDF</strong></p>
+      <p>可一次選取多個（最多 40 個）</p>
+      <p style="margin-top:8px;font-size:11px;color:#475569">Claude 自動解析規則結構</p>
+    </div>
+    <input type="file" id="fileIn" accept=".pdf" multiple onchange="onSelect(event)">
+    <div class="panel-label">上傳紀錄</div>
+    <div class="log" id="log"><p style="font-size:12px;color:#475569">尚無上傳記錄</p></div>
+  </div>
+  <div class="right">
+    <div class="toolbar">
+      <input type="text" id="searchIn" placeholder="搜尋名稱或關鍵字..." oninput="load()">
+    </div>
+    <div class="count" id="cnt"></div>
+    <table>
+      <thead><tr><th>名稱</th><th>尺寸</th><th>規則</th><th>PDF</th><th>操作</th></tr></thead>
+      <tbody id="tbody"><tr><td colspan="5" class="empty">載入中...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+<script>
+const key=()=>document.getElementById('adminKey').value.trim();
+
+function onDrop(e){e.preventDefault();document.getElementById('drop').classList.remove('over');const f=[...e.dataTransfer.files].filter(x=>x.type==='application/pdf');if(f.length)processFiles(f);}
+function onSelect(e){processFiles([...e.target.files]);}
+
+async function processFiles(files){
+  if(!key()){alert('請輸入 Admin Key');document.getElementById('adminKey').focus();return;}
+  const logEl=document.getElementById('log');
+  if(logEl.querySelector('p'))logEl.innerHTML='';
+  const ids={};
+  files.forEach(f=>{
+    const id='f'+Math.random().toString(36).slice(2);ids[f.name]=id;
+    logEl.insertAdjacentHTML('afterbegin',`<div class="log-item" id="${id}"><div class="log-name">📄 ${f.name}</div><div class="bar-wrap"><div class="bar bar-spin" id="b${id}"></div></div><div class="log-status" id="s${id}">解析中...</div></div>`);
+  });
+  for(const f of files){
+    const id=ids[f.name];
+    try{
+      const fd=new FormData();fd.append('pdf',f);
+      const res=await fetch('/admin/upload',{method:'POST',headers:{'x-admin-key':key()},body:fd});
+      const d=await res.json();
+      if(res.ok&&d.success){
+        document.getElementById('b'+id).className='bar bar-ok';
+        document.getElementById('s'+id).innerHTML=`<span class="ok">✅ ${d.action==='updated'?'更新':'建立'}：${d.label}（${d.rulesCount} 規則）</span>`;
+      }else throw new Error(d.error||'失敗');
+    }catch(e){
+      document.getElementById('b'+id).className='bar bar-err';
+      document.getElementById('s'+id).innerHTML=`<span class="err">❌ ${e.message}</span>`;
+    }
+  }
+  load();
+}
+
+async function load(){
+  if(!key())return;
+  const q=document.getElementById('searchIn').value;
+  const res=await fetch(`/admin/guidelines${q?`?search=${encodeURIComponent(q)}`:''}`,{headers:{'x-admin-key':key()}});
+  if(!res.ok){document.getElementById('tbody').innerHTML=`<tr><td colspan="5" class="empty">載入失敗（Key 錯誤？）</td></tr>`;return;}
+  const d=await res.json();
+  document.getElementById('cnt').textContent=`共 ${d.total} 個 Banner 規格`;
+  if(!d.items.length){document.getElementById('tbody').innerHTML='<tr><td colspan="5" class="empty">尚未建立規格</td></tr>';return;}
+  document.getElementById('tbody').innerHTML=d.items.map(g=>`
+    <tr>
+      <td><div class="label-cell">${g.label}</div><div class="sub">${g.typeKey}${g.aliases?.length?' · '+g.aliases.slice(0,3).join(', '):''}</div></td>
+      <td class="dim">${g.dimensions?g.dimensions.width+'×'+g.dimensions.height:'—'}</td>
+      <td class="rc">${g.rulesCount} 項</td>
+      <td>${g.hasPdf?'<span style="color:#22c55e">✔</span>':'<span style="color:#ef4444">✗</span>'}</td>
+      <td class="act">
+        ${g.hasPdf?`<button class="act btn-dl" onclick="dlPdf('${g.typeKey}','${g.label}')">PDF</button>`:''}
+        <button class="act btn-del" onclick="del('${g.typeKey}','${g.label}')">刪除</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function del(k,label){
+  if(!confirm(`刪除「${label}」？`))return;
+  await fetch(`/admin/guidelines/${k}`,{method:'DELETE',headers:{'x-admin-key':key()}});
+  load();
+}
+function dlPdf(k,label){
+  const a=document.createElement('a');a.href=`/admin/pdf/${k}?key=${key()}`;a.download=label+'.pdf';a.click();
+}
+document.getElementById('adminKey').addEventListener('change',load);
+</script>
+</body>
+</html>
