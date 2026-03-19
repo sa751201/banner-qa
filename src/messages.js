@@ -72,31 +72,29 @@ function analyzing(guideline) {
 }
 
 function pass(guideline) {
-  const ruleRows = (guideline.rules || []).slice(0, 8).map(r => ({
-    type: 'box', layout: 'horizontal', spacing: 'sm', margin: 'xs',
-    contents: [
-      { type: 'text', text: '✅', size: 'sm', flex: 0 },
-      { type: 'text', text: r.description, size: 'sm', color: '#333333', wrap: true, flex: 1 },
-    ],
-  }));
   return {
     type: 'flex',
-    altText: `✅ ${guideline.label} 審查通過`,
+    altText: '✅ ' + guideline.label + ' 審查通過',
     contents: {
       type: 'bubble',
-      header: {
-        type: 'box', layout: 'vertical', backgroundColor: '#27AE60', paddingAll: '16px',
-        contents: [
-          { type: 'text', text: '✅ 審查通過', color: '#FFFFFF', size: 'xl', weight: 'bold' },
-          { type: 'text', text: guideline.label, color: '#D5F5E3', size: 'sm', wrap: true },
-        ],
-      },
       body: {
-        type: 'box', layout: 'vertical', spacing: 'sm',
+        type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
         contents: [
-          { type: 'text', text: '所有規格均符合要求 🎉', weight: 'bold' },
+          {
+            type: 'box', layout: 'horizontal', spacing: 'md',
+            contents: [
+              { type: 'text', text: '✅', size: 'xxl', flex: 0 },
+              {
+                type: 'box', layout: 'vertical', flex: 1,
+                contents: [
+                  { type: 'text', text: '審查通過', size: 'xl', weight: 'bold', color: '#27AE60' },
+                  { type: 'text', text: guideline.label, size: 'sm', color: '#666666', wrap: true },
+                ],
+              },
+            ],
+          },
           { type: 'separator' },
-          ...ruleRows,
+          { type: 'text', text: '此 Banner 符合所有規格要求，可以使用 🎉', size: 'sm', color: '#666666', wrap: true },
         ],
       },
     },
