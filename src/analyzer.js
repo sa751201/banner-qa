@@ -33,27 +33,34 @@ async function checkVision(imageBuffer, guideline) {
   if (visionRules.length === 0) return [];
 
   const rulesText = visionRules
-    .map((r, i) => `${i + 1}. [${r.id}] (${r.severity || 'error'}) ${r.description}`)
+    .map((r, i) => `${i + 1}. [${r.id}] [${r.severity === 'warning' ? '建議' : '必須'}] ${r.description}`)
     .join('\n');
 
   const prompt = `你是「${guideline.label}」的 Banner 規格審查員。
 
-請逐條審查此圖片是否符合以下規則：
+【重要判斷原則】
+- 只有當規則「明確違反」時才列入 violations，有疑問時判定為通過
+- 標示「可選」或「建議」的項目：只有明顯違反才列入，且 severity 設為 "warning"
+- 數量/字數限制：只有「超過上限」才算違規，「符合上限」或「低於上限」均為通過
+- 不要對圖片中沒有出現的可選元素報告違規
+
+【待審查規則】
 ${rulesText}
 
-只回傳 JSON，不通過的規則列於 violations（全部通過則回傳空陣列）：
+請逐條審查圖片，只回傳 JSON：
 {
   "violations": [
     {
-      "rule_id": "同上方[]內的id",
-      "description": "具體說明違規原因（繁體中文，30字以內）",
+      "rule_id": "規則id",
+      "description": "具體說明違規原因（繁體中文，說明實際數值與限制）",
       "bbox": {"x": 0, "y": 0, "width": 100, "height": 100} 或 null,
       "severity": "error 或 warning"
     }
   ]
-}`;
+}
 
-  // 偵測圖片格式
+符合規範的項目不要列出。violations 為空陣列代表全部通過。`;
+
   let mediaType = 'image/jpeg';
   if (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50) mediaType = 'image/png';
   else if (imageBuffer[0] === 0x47 && imageBuffer[1] === 0x49) mediaType = 'image/gif';
@@ -65,22 +72,14 @@ ${rulesText}
     messages: [{
       role: 'user',
       content: [
-        {
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: mediaType,
-            data: imageBuffer.toString('base64'),
-          },
-        },
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBuffer.toString('base64') } },
         { type: 'text', text: prompt },
       ],
     }],
   });
 
   try {
-    const clean = res.content[0].text.trim()
-      .replace(/^```json\n?/, '').replace(/\n?```$/, '');
+    const clean = res.content[0].text.trim().replace(/^```json\n?/, '').replace(/\n?```$/, '');
     return JSON.parse(clean).violations || [];
   } catch (e) {
     console.error('Vision parse error:', e.message);
