@@ -1,6 +1,6 @@
 // pdfParser.js — PDF → 結構化規則（透過 Claude API）
 
-const pdfParse = require('pdf-parse');
+const pdfParse = require('pdf-parse').default || require('pdf-parse');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
