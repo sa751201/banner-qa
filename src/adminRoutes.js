@@ -49,7 +49,7 @@ router.post('/upload', auth, upload.single('pdf'), async (req, res) => {
   }
 });
 
-router.post('/upload-batch', auth, upload.array('pdfs', 40), async (req, res) => {
+router.post('/upload-batch', auth, upload.array('pdfs', 60), async (req, res) => {
   if (!req.files?.length) return res.status(400).json({ error: '未收到 PDF' });
   const results = [];
   for (const file of req.files) {
