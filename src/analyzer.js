@@ -1,5 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const { checkImageContrast } = require('./contrastChecker');
 
 async function checkProgrammatic(imageBuffer, guideline) {
   const violations = [];
@@ -47,7 +48,7 @@ async function checkVision(imageBuffer, guideline) {
 【待審查規則】
 ${rulesText}
 
-請逐條審查圖片，只回傳 JSON：
+請逐條審查圖片，並額外偵測圖片中所有文字區域的前景色與背景色。回傳 JSON：
 {
   "violations": [
     {
@@ -56,10 +57,21 @@ ${rulesText}
       "bbox": {"x": 0, "y": 0, "width": 100, "height": 100} 或 null,
       "severity": "error 或 warning"
     }
+  ],
+  "text_regions": [
+    {
+      "label": "文字描述（如「標題」「副標」「按鈕文字」）",
+      "fg_color": [255, 255, 255],
+      "bg_color": [0, 0, 0],
+      "fontSize_approx": 16,
+      "isBold": false,
+      "bbox": {"x": 0, "y": 0, "width": 100, "height": 100}
+    }
   ]
 }
 
-符合規範的項目不要列出。violations 為空陣列代表全部通過。`;
+text_regions 請列出圖片中所有可見文字，估算其 RGB 前景色與背景色。
+符合規範的項目不要列出 violations。violations 為空陣列代表全部通過。`;
 
   let mediaType = 'image/jpeg';
   if (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50) mediaType = 'image/png';
@@ -80,19 +92,25 @@ ${rulesText}
 
   try {
     const clean = res.content[0].text.trim().replace(/^```json\n?/, '').replace(/\n?```$/, '');
-    return JSON.parse(clean).violations || [];
+    const parsed = JSON.parse(clean);
+    return {
+      violations: parsed.violations || [],
+      textRegions: parsed.text_regions || [],
+    };
   } catch (e) {
     console.error('Vision parse error:', e.message);
-    return [];
+    return { violations: [], textRegions: [] };
   }
 }
 
 async function analyze(imageBuffer, guideline) {
-  const [prog, vision] = await Promise.all([
+  const [prog, visionResult] = await Promise.all([
     checkProgrammatic(imageBuffer, guideline),
     checkVision(imageBuffer, guideline),
   ]);
-  return [...prog, ...vision];
+  // 對比度檢查（WCAG AA）
+  const contrastViolations = checkImageContrast(visionResult.textRegions);
+  return [...prog, ...visionResult.violations, ...contrastViolations];
 }
 
 module.exports = { analyze };

@@ -6,6 +6,7 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
+const { checkPsdContrast } = require('./contrastChecker');
 
 // ── 從 PSD Buffer 提取圖層資訊 ─────────────────────────
 async function extractPsdLayers(psdBuffer) {
@@ -59,11 +60,20 @@ async function extractPsdLayers(psdBuffer) {
 
     walkNode(tree);
 
+    // 取得合成圖像素資料（RGBA）供對比度檢查使用
+    let compositePixels = null;
+    try {
+      if (psd.image && psd.image.pixelData) {
+        compositePixels = Buffer.from(psd.image.pixelData);
+      }
+    } catch (_) {}
+
     return {
       width: psd.header.width,
       height: psd.header.height,
       layers,
       textLayers: layers.filter(l => l.isText && l.visible),
+      compositePixels,
     };
   } finally {
     fs.unlink(tmpPath, () => {});
@@ -139,11 +149,21 @@ async function analyzePsd(psdBuffer, guideline) {
     }
   }
 
+  // 對比度檢查（WCAG AA）
+  let contrastViolations = [];
+  if (psdData.compositePixels) {
+    try {
+      contrastViolations = await checkPsdContrast(psdData.compositePixels, psdData);
+    } catch (e) {
+      console.error('Contrast check error:', e.message);
+    }
+  }
+
   // AI 比對其他規則
   const aiViolations = await analyzePsdAgainstGuideline(psdData, guideline);
 
   return {
-    violations: [...violations, ...aiViolations],
+    violations: [...violations, ...contrastViolations, ...aiViolations],
     psdData, // 回傳原始數據供 Flex Message 顯示
   };
 }

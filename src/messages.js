@@ -181,10 +181,17 @@ function fail(guideline, violations, annotatedImageUrl, fileType = 'image', psdD
   if (psdData?.textLayers?.length) {
     bodyContents.push({ type: 'text', text: '📋 偵測到的文字圖層', size: 'xs', color: '#666666', weight: 'bold', margin: 'sm' });
     psdData.textLayers.slice(0, 4).forEach(l => {
+      let info = `・${l.name}：「${l.text.slice(0, 10)}」${l.fontSize ? l.fontSize + 'px' : ''}`;
+      if (l.contrastRatio != null) {
+        const icon = l.contrastPasses ? '✓' : '✗';
+        info += ` 對比 ${l.contrastRatio}:1 ${icon}`;
+      }
       bodyContents.push({
         type: 'text',
-        text: `・${l.name}：「${l.text.slice(0, 10)}」${l.fontSize ? l.fontSize + 'px' : ''}`,
-        size: 'xs', color: '#888888', wrap: true,
+        text: info,
+        size: 'xs',
+        color: l.contrastPasses === false ? '#E67E22' : '#888888',
+        wrap: true,
       });
     });
   }
