@@ -1,7 +1,8 @@
 // handler.js — LINE Webhook 核心邏輯（支援圖片 + PSD 雙模式審查）
 
 const db = require('./db');
-const { getSession, setSession, clearSession, STATE } = require('./session');
+const session = require('./session');
+const { STATE } = session;
 const msg = require('./messages');
 const { analyze } = require('./analyzer');
 const { analyzePsd } = require('./psdAnalyzer');
@@ -46,7 +47,7 @@ function createHandler(client) {
 
   // ── 收到圖片 ──────────────────────────────────────────
   async function onImage(event, userId, client) {
-    const s = getSession(userId);
+    const s = session.get(userId);
     if (s.state === STATE.PROCESSING)
       return client.replyMessage(event.replyToken, { type: 'text', text: '⏳ 上一張圖片仍在審查中，請稍後。' });
 
@@ -54,7 +55,7 @@ function createHandler(client) {
     try { buffer = await fetchContent(event.message.id, client); }
     catch (e) { return client.replyMessage(event.replyToken, msg.error('圖片下載失敗')); }
 
-    setSession(userId, {
+    session.set(userId, {
       state: STATE.WAITING_BANNER_NAME,
       image: buffer,
       fileType: 'image',
@@ -74,7 +75,7 @@ function createHandler(client) {
       });
     }
 
-    const s = getSession(userId);
+    const s = session.get(userId);
     if (s.state === STATE.PROCESSING)
       return client.replyMessage(event.replyToken, { type: 'text', text: '⏳ 上一個檔案仍在審查中，請稍後。' });
 
@@ -82,7 +83,7 @@ function createHandler(client) {
     try { buffer = await fetchContent(event.message.id, client); }
     catch (e) { return client.replyMessage(event.replyToken, msg.error('PSD 下載失敗')); }
 
-    setSession(userId, {
+    session.set(userId, {
       state: STATE.WAITING_BANNER_NAME,
       image: buffer,
       fileType: 'psd',
@@ -94,10 +95,10 @@ function createHandler(client) {
   // ── 文字訊息 ──────────────────────────────────────────
   async function onText(event, userId, client) {
     const text = event.message.text.trim();
-    const s = getSession(userId);
+    const s = session.get(userId);
 
     if (['取消', '重新上傳'].includes(text)) {
-      clearSession(userId);
+      session.reset(userId);
       return client.replyMessage(event.replyToken, { type: 'text', text: '🔄 已重置，請重新傳送圖片或 PSD。' });
     }
 
@@ -152,7 +153,7 @@ function createHandler(client) {
     const params = new URLSearchParams(event.postback.data);
     const action = params.get('action');
     const key = params.get('key');
-    const s = getSession(userId);
+    const s = session.get(userId);
 
     if (action === 'show_guideline') {
       const g = await db.findByKey(key);
@@ -179,7 +180,7 @@ function createHandler(client) {
 
   // ── 開始分析 ──────────────────────────────────────────
   async function startAnalysis(replyToken, userId, session, guideline, client) {
-    setSession(userId, { state: STATE.PROCESSING, guidelineKey: guideline.typeKey });
+    session.set(userId, { state: STATE.PROCESSING, guidelineKey: guideline.typeKey });
     const isPsd = session.fileType === 'psd';
     await client.replyMessage(replyToken, msg.analyzing(guideline, isPsd));
     runAnalysis(userId, session.image, session.fileType, guideline, client).catch(console.error);
@@ -215,7 +216,7 @@ function createHandler(client) {
       console.error('Analysis error:', e);
       await client.pushMessage(userId, [msg.error('分析過程發生錯誤')]);
     } finally {
-      clearSession(userId);
+      session.reset(userId);
     }
   }
 
