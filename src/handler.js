@@ -110,7 +110,7 @@ function createHandler(client) {
   }
 
   // ── 廠商提供 Banner 名稱 ──────────────────────────────
-  async function onBannerNameProvided(event, userId, keyword, session, client) {
+  async function onBannerNameProvided(event, userId, keyword, sess, client) {
     const results = await db.search(keyword);
 
     if (results.length === 0) {
@@ -137,7 +137,7 @@ function createHandler(client) {
       });
     }
 
-    await startAnalysis(event.replyToken, userId, session, results[0], client);
+    await startAnalysis(event.replyToken, userId, sess, results[0], client);
   }
 
   // ── 查詢規格 ──────────────────────────────────────────
@@ -179,11 +179,11 @@ function createHandler(client) {
   }
 
   // ── 開始分析 ──────────────────────────────────────────
-  async function startAnalysis(replyToken, userId, session, guideline, client) {
+  async function startAnalysis(replyToken, userId, sess, guideline, client) {
     session.set(userId, { state: STATE.PROCESSING, guidelineKey: guideline.typeKey });
-    const isPsd = session.fileType === 'psd';
+    const isPsd = sess.fileType === 'psd';
     await client.replyMessage(replyToken, msg.analyzing(guideline, isPsd));
-    runAnalysis(userId, session.image, session.fileType, guideline, client).catch(console.error);
+    runAnalysis(userId, sess.image, sess.fileType, guideline, client).catch(console.error);
   }
 
   async function runAnalysis(userId, buffer, fileType, guideline, client) {
