@@ -60,6 +60,7 @@ function createHandler(client) {
       image: buffer,
       fileType: 'image',
     });
+    db.logEvent({ type: 'interaction', userId, action: 'upload_image' }).catch(() => {});
     return client.replyMessage(event.replyToken, msg.askBannerName());
   }
 
@@ -89,6 +90,7 @@ function createHandler(client) {
       fileType: 'psd',
       fileName,
     });
+    db.logEvent({ type: 'interaction', userId, action: 'upload_psd' }).catch(() => {});
     return client.replyMessage(event.replyToken, msg.askBannerNamePsd());
   }
 
@@ -99,6 +101,7 @@ function createHandler(client) {
 
     if (['取消', '重新上傳'].includes(text)) {
       session.reset(userId);
+      db.logEvent({ type: 'interaction', userId, action: 'cancel' }).catch(() => {});
       return client.replyMessage(event.replyToken, { type: 'text', text: '🔄 已重置，請重新傳送圖片或 PSD。' });
     }
 
@@ -143,6 +146,7 @@ function createHandler(client) {
   // ── 查詢規格 ──────────────────────────────────────────
   async function onGuidelineQuery(event, userId, keyword, client) {
     const results = await db.search(keyword);
+    db.logEvent({ type: 'interaction', userId, action: 'search_guideline', keyword, resultCount: results.length }).catch(() => {});
     if (results.length === 0) return client.replyMessage(event.replyToken, msg.notFound(keyword));
     if (results.length === 1) return client.replyMessage(event.replyToken, msg.guidelineFound(results[0]));
     return client.replyMessage(event.replyToken, msg.searchResults(results));
@@ -158,12 +162,14 @@ function createHandler(client) {
     if (action === 'show_guideline') {
       const g = await db.findByKey(key);
       if (!g) return client.replyMessage(event.replyToken, msg.error('找不到此規格'));
+      db.logEvent({ type: 'interaction', userId, action: 'select_guideline', guidelineKey: key }).catch(() => {});
       return client.replyMessage(event.replyToken, msg.guidelineFound(g));
     }
 
     if (action === 'send_pdf') {
       const g = await db.findByKey(key);
       if (!g?.pdfPath) return client.replyMessage(event.replyToken, msg.error('此規格尚未上傳 PDF'));
+      db.logEvent({ type: 'interaction', userId, action: 'download_pdf', guidelineKey: key }).catch(() => {});
       return client.replyMessage(event.replyToken, {
         type: 'text',
         text: `📥 ${g.label} 規格 PDF\n\n點擊下載：\n${process.env.BASE_URL}/api/pdf/${g.typeKey}`,
@@ -187,6 +193,7 @@ function createHandler(client) {
   }
 
   async function runAnalysis(userId, buffer, fileType, guideline, client) {
+    const startTime = Date.now();
     try {
       let violations = [];
       let psdData = null;
@@ -198,6 +205,18 @@ function createHandler(client) {
       } else {
         violations = await analyze(buffer, guideline);
       }
+
+      const durationMs = Date.now() - startTime;
+      db.logEvent({
+        type: 'review', userId, fileType,
+        guidelineKey: guideline.typeKey,
+        guidelineLabel: guideline.label,
+        result: violations.length === 0 ? 'pass' : 'fail',
+        violationCount: violations.length,
+        violations: violations.map(v => ({ rule_id: v.rule_id, severity: v.severity })),
+        hasContrastIssue: violations.some(v => v.rule_id === 'contrast'),
+        durationMs,
+      }).catch(() => {});
 
       let messages;
       if (violations.length === 0) {
@@ -214,6 +233,13 @@ function createHandler(client) {
       await client.pushMessage(userId, messages);
     } catch (e) {
       console.error('Analysis error:', e);
+      db.logEvent({
+        type: 'error', userId, action: 'analysis',
+        errorMessage: e.message,
+        fileType,
+        guidelineKey: guideline.typeKey,
+        durationMs: Date.now() - startTime,
+      }).catch(() => {});
       await client.pushMessage(userId, [msg.error('分析過程發生錯誤')]);
     } finally {
       session.reset(userId);

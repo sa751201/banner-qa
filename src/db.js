@@ -21,6 +21,13 @@ const guidelines = Datastore.create({
 guidelines.ensureIndex({ fieldName: 'typeKey', unique: true });
 guidelines.ensureIndex({ fieldName: 'label' });
 
+const analytics = Datastore.create({
+  filename: path.join(DATA_DIR, 'analytics.db'),
+  autoload: true,
+});
+analytics.ensureIndex({ fieldName: 'type' });
+analytics.ensureIndex({ fieldName: 'timestamp' });
+
 async function create(data) {
   return guidelines.insert({ ...data, psdTemplates: [], createdAt: new Date(), updatedAt: new Date() });
 }
@@ -80,7 +87,74 @@ async function getPsdTemplate(typeKey, templateId) {
   return (g.psdTemplates || []).find(t => t.id === templateId) || null;
 }
 
+// ── Analytics 操作 ───────────────────────────────────
+
+async function logEvent(data) {
+  return analytics.insert({ ...data, timestamp: new Date() });
+}
+
+async function getAnalytics(filter = {}) {
+  const query = {};
+  if (filter.type) query.type = filter.type;
+  if (filter.userId) query.userId = filter.userId;
+  if (filter.from || filter.to) {
+    query.timestamp = {};
+    if (filter.from) query.timestamp.$gte = new Date(filter.from);
+    if (filter.to) query.timestamp.$lte = new Date(filter.to);
+  }
+  return analytics.find(query).sort({ timestamp: -1 }).limit(filter.limit || 200);
+}
+
+async function getStats() {
+  const all = await analytics.find({ type: 'review' });
+  const interactions = await analytics.find({ type: 'interaction' });
+  const errors = await analytics.find({ type: 'error' });
+
+  const passCount = all.filter(r => r.result === 'pass').length;
+  const failCount = all.filter(r => r.result === 'fail').length;
+  const totalReviews = all.length;
+  const avgDuration = totalReviews > 0
+    ? Math.round(all.reduce((sum, r) => sum + (r.durationMs || 0), 0) / totalReviews)
+    : 0;
+
+  // 常見違規 top 10
+  const ruleCounts = {};
+  all.forEach(r => (r.violations || []).forEach(v => {
+    ruleCounts[v.rule_id] = (ruleCounts[v.rule_id] || 0) + 1;
+  }));
+  const topViolations = Object.entries(ruleCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([rule_id, count]) => ({ rule_id, count }));
+
+  // 檔案類型分布
+  const byFileType = { image: 0, psd: 0 };
+  all.forEach(r => { if (r.fileType) byFileType[r.fileType] = (byFileType[r.fileType] || 0) + 1; });
+
+  // 互動類型分布
+  const byAction = {};
+  interactions.forEach(r => { byAction[r.action] = (byAction[r.action] || 0) + 1; });
+
+  // 對比度問題數
+  const contrastIssues = all.filter(r => r.hasContrastIssue).length;
+
+  return {
+    totalReviews,
+    passCount,
+    failCount,
+    passRate: totalReviews > 0 ? Math.round(passCount / totalReviews * 100) : 0,
+    avgDurationMs: avgDuration,
+    topViolations,
+    byFileType,
+    byAction,
+    contrastIssues,
+    totalInteractions: interactions.length,
+    totalErrors: errors.length,
+  };
+}
+
 module.exports = {
   create, upsert, findByKey, search, all, remove,
   addPsdTemplate, removePsdTemplate, getPsdTemplate,
+  logEvent, getAnalytics, getStats,
 };

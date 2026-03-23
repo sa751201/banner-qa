@@ -200,4 +200,22 @@ router.get('/pdf/:key', auth, async (req, res) => {
   res.download(g.pdfPath, g.pdfFilename || `${g.label}.pdf`);
 });
 
+// ── GET /admin/analytics ─────────────────────────────
+router.get('/analytics', auth, async (req, res) => {
+  const filter = {};
+  if (req.query.type) filter.type = req.query.type;
+  if (req.query.userId) filter.userId = req.query.userId;
+  if (req.query.from) filter.from = req.query.from;
+  if (req.query.to) filter.to = req.query.to;
+  if (req.query.limit) filter.limit = parseInt(req.query.limit, 10);
+  const records = await db.getAnalytics(filter);
+  res.json({ total: records.length, records });
+});
+
+// ── GET /admin/analytics/stats ──────────────────────
+router.get('/analytics/stats', auth, async (req, res) => {
+  const stats = await db.getStats();
+  res.json(stats);
+});
+
 module.exports = router;
