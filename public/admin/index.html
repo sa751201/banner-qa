@@ -101,7 +101,7 @@ input[type=file]{display:none}
       <input type="text" id="searchIn" placeholder="搜尋名稱或關鍵字..." oninput="load()">
     </div>
     <div class="count" id="cnt"></div>
-    <div id="guidelineList"><div class="empty">載入中...</div></div>
+    <div id="guidelineList"><div class="empty">請先輸入 Admin Key</div></div>
   </div>
 </div>
 
@@ -150,7 +150,11 @@ async function processFiles(files) {
 
 // ── 載入列表 ──────────────────────────────────────────
 async function load() {
-  if (!key()) return;
+  if (!key()) {
+    document.getElementById('guidelineList').innerHTML = '<div class="empty">請先輸入 Admin Key</div>';
+    document.getElementById('cnt').textContent = '';
+    return;
+  }
   const q = document.getElementById('searchIn').value;
   const res = await fetch(`/admin/guidelines${q?`?search=${encodeURIComponent(q)}`:''}`, { headers: {'x-admin-key': key()} });
   if (!res.ok) { document.getElementById('guidelineList').innerHTML = `<div class="empty">載入失敗</div>`; return; }
@@ -284,7 +288,7 @@ async function delPsd(k, tid, name) {
 function dlPdf(k, label) { const a=document.createElement('a'); a.href=`/admin/pdf/${k}?key=${key()}`; a.download=label+'.pdf'; a.click(); }
 function dlPsd(k, tid, filename) { const a=document.createElement('a'); a.href=`/admin/guidelines/${k}/psd-templates/${tid}/download?key=${key()}`; a.download=filename; a.click(); }
 
-document.getElementById('adminKey').addEventListener('change', load);
+document.getElementById('adminKey').addEventListener('input', load);
 </script>
 </body>
 </html>
